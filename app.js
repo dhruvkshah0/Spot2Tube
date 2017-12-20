@@ -1,40 +1,67 @@
 const express = require('express');
 const path = require('path');
-const favicon = require('serve-favicon');
+// const favicon = require('serve-favicon');
 const logger = require('morgan');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const request = require('request');
 const config = require('./../config/config');
+const async = require('async');
+
+const homeRoute = require('./routes/home');
+
 const app = express();
-
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
-
-// uncomment after placing your favicon in /public
-//app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
-app.use(logger('dev'));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
-
 const redirectUrl = 'http://localhost:3000/callback/';
 const redirectUri = encodeURIComponent(redirectUrl);
-var access_token = '';
-var refresh_token = '';
+
+
+
+app.set('views',path.join(__dirname,'views'));
+app.engine('html',require('ejs').renderFile);
+app.set('view engine','html');
+app.set('port', process.env.PORT || 3000);
+
+//app.use(favicon(path.join(__dirname, 'public','favicon.ico')));
+app.use(bodyParser.json({limit:'50mb'}));
+app.use(bodyParser.urlencoded({limit:'50mb',extended:true}));
+app.use(cookieParser());
+// app.use(session({resave:true,saveUninitialized:true,secret:'edcormwodkvcpwkf',cookie:{maxAge:60000}}));
+
+
+app.use('/',express.static(path.join(__dirname,'public')));
+
+
+// // view engine setup
+// app.set('views',path.join(__dirname,'views'));
+// app.engine('html',require('ejs').renderFile);
+// // app.set('view engine','html');
+// app.set('port', process.env.PORT || 3000);
+//
+// // uncomment after placing your favicon in /public
+// //app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
+// app.use(logger('dev'));
+// app.use(bodyParser.json());
+// app.use(bodyParser.urlencoded({ extended: false }));
+// app.use(cookieParser());
+// app.use(express.static(path.join(__dirname, 'public')));
+
+//global tokens for requesting/refresh
+let access_token = '';
+let refresh_token = '';
+
+app.use('/home', homeRoute);
+
 app.get("/", function(req, res){
-    var redirectAuth = "https://accounts.spotify.com/authorize?client_id=" + config.spotify.client_id +
+    let redirectAuth = "https://accounts.spotify.com/authorize?client_id=" + config.spotify.client_id +
     `&response_type=code&redirect_uri=${redirectUri}&scope=user-read-private%20playlist-read-private%20playlist-read-collaborative%20user-library-read%20user-read-recently-played`;
     res.redirect(redirectAuth);
 });
 
 
 app.get("/callback", function(req, res){
- var authCode = req.query.code;
-
- var options = {
+ const authCode = req.query.code;
+ //toke options
+ let options = {
    method: 'POST',
    url: 'https://accounts.spotify.com/api/token',
    headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -46,20 +73,58 @@ app.get("/callback", function(req, res){
      client_secret: config.spotify.client_secret
    },
  };
- request(options, function (error, response, body) {
-    if (error) console.log(err)
+ request(options, (err, response, body) => {
+    if (err) console.log(err);
     else {
-      console.log(body);
       accessToken = JSON.parse(body).access_token;
       refreshToken = JSON.parse(body).refresh_token;
+      res.redirect('/home');
 
+
+  //     getAllPlaylists((playlists,err) => {
+  //       if(err) console.log(err);
+  //       else {
+  //         res.send(playlists);
+  //       }
+  //     });
     }
   });
 });
 
+function getAllPlaylists(callback) {
+  let options = {
+    method: 'GET',
+    url: 'https://api.spotify.com/v1/me/playlists',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'Authorization' : `Bearer ${accessToken}`,
+    },
+  };
+  request(options, (err, response, body) => {
+     if (err) callback(null,err);
+     else {
+       callback(body.items,null);
+     }
+   });
+}
+
+
+function getAllSongs(callback) {
+
+
+}
+
+
+
+function getVideoLink(callback) {
+
+
+
+
+}
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
-  var err = new Error('Not Found');
+  let err = new Error('Not Found');
   err.status = 404;
   next(err);
 });
